@@ -1,0 +1,739 @@
+# TPS Développement et Exploitation - DevOps DataOps
+## TP1 Découverte de l’infrastructure et des outils
+### Anthony MUDET - M1 SMART Computing
+
+---
+
+### 2. Usages principaux du serveur de déploiement
+
+#### 2.1 Connection SSH par mot de passe 
+
+**Création de la clé ssh**
+- **sur machine** : `$ ssh-keygen -t ecdsa` 
+
+**Connection à podman**
+- **sur machine** : `$ ssh E253432U@podman`
+- **sur machine** : `$ ssh-copy-id podman`
+
+**Affichage de l'emplacement du répertoire**
+- **sur podman** : `$ pwd` 
+- **réponse** : `/comptes/E253432U/`
+
+**Affichagedu contenu**
+- **sur podman** : `$ ls` (aucune réponse)
+
+**Création du répertoire**
+- **sur podman** : `$ mkdir tp-decouverte-serveur` puis `$ cd tp-decouverte-serveur`
+
+**Création d'un fichier txt**
+- **sur podman** : `$ nano hello.txt`
+- **dans hello.txt** : j'écris Hello world! puis `CRTL+O` pour écrire et `CRTL+X` pour quitter
+- *Note* : pour que ce soit plus simple j'utiliserai `$ echo` pour écrire dans un nouveau fichier
+
+**Affichage de hello.txt**
+- **sur podman** : `$ cat hello.txt`
+- **réponse** : `Hello world!`
+
+#### 2.2 Générer sa clé SSH personelle
+
+**Création de la clé SSH**
+- **sur podman** : `$ ssh-keygen -t ecdsa`
+
+**Vérification de la création**
+- **sur podman** : `$ ls ~/.ssh`
+- **réponse** : `authorised_keys id_ecdsa id_ecdsa.pub`
+
+#### 2.4 Envoi de fichier vers le serveur
+
+**Création du dossier**
+- **sur machine** : `$ mkdir tp-decouverte-envoi` puis `$ cd tp-decouverte-envoi`
+
+**Mise en place des fichiers et dossiers**
+- **sur machine** : 
+    - `$ echo "Ceci est mon premier envoi" >> envoi1.txt`
+    - `$ mkdir envoi2` puis `$ cd envoi2`
+    - `$ echo "Ceci est le premier fichier de mon second envoi" >> envoi2_a.txt`
+    - `$ echo "Ceci est le second fichier de mon second envoi" >> envoi2_b.txt`
+
+**Vérification des fichiers**
+- **sur podman** : `$ ls` (actuellement dans le répertoire tp-decouverte-serveur)
+- **réponse** : `hello.txt`
+
+- **sur machine** : `$ ls` (actuellement dans le répertoire tp-decouverte-envoi)
+- **réponse** : `envoi1.txt envoi2`
+
+**Envoi de envoi1.txt**
+- **sur machine** : `$ scp envoi1.txt podman:~/tp-decouverte-serveur`
+- **sur podman** : 
+    - `$ ls` **réponse** : `envoi1.txt hello.txt`
+    - `$ cat envoi1.txt` **réponse** : `Ceci est mon premier envoi`
+
+**Envoi du dossier envoi2**
+- **sur machine** : `$ scp -r envoi2 podman:~/tp-decouverte-serveur`
+- **sur podman** :
+    - `$ ls` **réponse** : `envoi1.txt envoi2 hello.txt`
+    - `$ cat envoi2/envoi2_a.txt` **réponse** : Ceci est le premier fichier de mon second envoi
+    - `$ cat envoi2/envoi2_b.txt` **réponse** : Ceci est le second fichier de mon second envoi
+
+### 3. Comprendre un peu l'environnement de déploiement
+
+#### 3.1. Carte d'identité de l'environnement
+
+**Connaître le système d'exploitation**
+- **sur podman** : `$ cat /etc/os-release` 
+- **réponse** : 
+    ```txt
+    PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+    NAME="Debian GNU/Linux"
+    VERSION_ID="13"
+    VERSION="13 (trixie)"
+    VERSION_CODENAME=trixie
+    DEBIAN_VERSION_FULL=13.1
+    ID=debian
+    HOME_URL="https://www.debian.org/"
+    SUPPORT_URL="https://www.debian.org/support"
+    BUG_REPORT_URL="https://bugs.debian.org/"
+    ```
+- ici on voit que podman tourne sur la version 13 (appelé trixie) de Debian
+- **sur podman** : `$ hostnamectl`
+- **réponse**
+    ```txt
+    Static hostname: podman
+        Icon name: computer-vm
+            Chassis: vm 
+        Machine ID: d0711669da3c4e54ad8b28726304b98a
+            Boot ID: d45f1017c9ea4e8e96775894ef13289a
+        AF_VSOCK CID: 1
+    Virtualization: kvm
+    Operating System: Debian GNU/Linux 13 (trixie)                
+            Kernel: Linux 6.12.43+deb13-amd64
+        Architecture: x86-64
+    Hardware Vendor: QEMU
+    Hardware Model: Standard PC _i440FX + PIIX, 1996_
+    Firmware Version: rel-1.16.3-0-ga6ed6b701f0a-prebuilt.qemu.org
+    Firmware Date: Tue 2014-04-01
+        Firmware Age: 11y 6month 1w 1d      
+    ```
+- Avec cette commande on voit également que le système tourne sur la version 13 de Debian.
+
+#### 3.2. Variables d'environnement
+
+- **sur podman** : 
+    - `$ printenv` (je n'affiche pas le résultat vu qu'il y a beaucoup de résultats)
+    - `$ MAVARIABLE="mavaleur"`
+    - `$ echo $MAVARIABLE` **réponse** : `mavaleur`
+
+#### 3.3 Droits d'accès
+
+1. test des droits dans le répertoire courant
+- **sur podman** :
+    - `$ touch ~/fichier_temp`
+    - `$ ls ~` **réponse** : `fichier_temp tp-decouverte-serveur`
+    - `$ rm ~/fichier_temp` -> OK
+
+2. test des droits dans un répertoire avec accès limité
+- **sur podman** : `$ touch /etc/fichier_temp`
+- **réponse** : `touch: impossible de faire un touch '/etc/fichier_temp': Permission non accordée`
+
+3. test d'installation de git
+- **sur podman** : `$ apt install git`
+- **réponse** :
+    ```text
+    Erreur : Impossible d'ouvrir le fichier verrou /var/lib/dpkg/lock-frontend - open (13: Permission non accordée)
+    Erreur : Impossible d'obtenir le verrou de dpkg (/var/lib/dpkg/lock-frontend). Avez-vous les droits du superutilisateur ?
+    ```
+
+### 4. Quelques petits déploiements (sans conteneurs)
+
+#### 4.1. replace_string
+
+**Téléchargement et envoi**
+- **sur machine** :
+    - `$ git clone https://gitlab.univ-nantes.fr/gl/developpement_exploitation/resources/small_programs.git`
+    - `$ scp -r small_programs podman:~/`
+- **sur podman** :
+    - `$ cd ~/small_programs/1_replace_string`
+    - `$ nano song.txt`
+    - `$ python3 replace_string.py -s wall -r uwu song.txt`
+- **réponse** :
+    ```txt
+    wall -r uwu song.txt 
+    Ten green uwus
+    Hanging on the uwu
+    Ten green uwus
+    Hanging on the uwu
+    And if one green uwu
+    Should accidentally fall
+    There’ll be nine green uwus
+    Hanging on the uwu
+    ```
+1. Il y a besoin de python pour qu'il fonctionne avec les librairies importées dans le code.
+2. Non je n'ai pas vérifié
+3. On peut utiliser la commande `$ python3 --version` ce qui retourne sur podman : `Python 3.13.5`
+
+#### 4.2. compress_file
+
+- **sur podman** :
+    - `$ cd ../2_compress_file`
+    - `$ python3 compress_file.py -o compressed README.adoc`
+
+- **réponse** :
+    ```txt
+    Traceback (most recent call last):
+    File "/comptes/E253432U/small_programs/2_compress_file/compress_file.py", line 1, in <module>
+        from compression import zstd
+    ModuleNotFoundError: No module named 'compression'
+    ```
+
+1. À l'exécution, le programme crash car il ne trouve pas le module 'compression'
+2. En utilisant la commande `$ pip show compression` on a comme réponse `WARNING: Package(s) not found: compression` ce qui signifie que la dépendance n'est pas installée.
+3. Il nous faudrait passer  python3.14 pour utiliser le programme et nous n'avons pas accès aux permissions nécessaire pour mettre à jour.
+
+#### 4.3. print_colored_string
+
+- **sur podman** :
+    - `$ cd ../3_print_colored_string`
+    - `$ python3 print_colored_string.py -b green -c red "It's a trap!"`
+
+- **réponse** :
+    ```
+    Traceback (most recent call last):
+    File "/comptes/E253432U/small_programs/3_print_colored_string/print_colored_string.py", line 1, in <module>
+        from colored import Fore, Back, Style
+    ModuleNotFoundError: No module named 'colored'
+    ```
+
+1. À l'exécution, le programme crash car il ne trouve pas le module 'colored'
+2. En utilisant la commande `$ pip show colored` on a comme réponse `WARNING: Package(s) not found: colored` ce qui signifie que la dépendance n'est pas installée.
+3. Ici la bibliothèque existe bien pour notre version de l'interpréteur Python, mais il n'est pas installé et comme nous ne somme pas dans un environnement virtuel, il faudrait installer la dépendance via `$ apt install` sauf que l'on a vu plus tôt que l'on avait pas les droits nécessaires.
+
+#### 4.4. TicTacToe
+
+- **sur podman**
+    - `$ cd ../4_tictactoe`
+    - `$ javac TicTacToe.java`
+
+- **réponse** : 
+    ```txt
+    -bash: javac : commande introuvable
+    ```
+
+1. Le programme ne peut pas se compiler car la commande `$ javac` n'est pas présente
+2. Non java n'est pas présent sur le système
+3. Non on ne peut pas l'installer car on a pas la permission d'installer des choses sur le système.
+
+## TP2 Créer et manipuler des conteneurs
+
+### 3. Tutoriel : un premier conteneur Ubuntu
+#### 3.1. Exécution du conteneur
+
+- **sur podman** : `$ podman container run --name mon_premier_conteneur --tty --interactive docker.io/ubuntu:24.04`
+- **sur le container** : 
+  - `$ echo "Bonjour depuis un conteneur !"`
+  - `$ cat etc/os-release`
+  - **réponse** :
+    - ```txt
+        PRETTY_NAME="Ubuntu 24.04.3 LTS"
+        NAME="Ubuntu"
+        VERSION_ID="24.04"
+        VERSION="24.04.3 LTS (Noble Numbat)"
+        VERSION_CODENAME=noble
+        ID=ubuntu
+        ID_LIKE=debian
+        HOME_URL="https://www.ubuntu.com/"
+        SUPPORT_URL="https://help.ubuntu.com/"
+        BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+        PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+        UBUNTU_CODENAME=noble
+        LOGO=ubuntu-logo
+- **sur podman** :
+  - `$ podman container list`
+  - **réponse** :
+    - ```txt
+        CONTAINER ID  IMAGE                           COMMAND     CREATED        STATUS        PORTS       NAMES
+        57dcefd0cd59  docker.io/library/ubuntu:24.04  /bin/bash   5 minutes ago  Up 5 minutes              mon_premier_conteneur
+
+#### 3.2. Installation d’un paquet comme administrateur du conteneur
+
+- **sur le container** :
+  - `$ apt update && apt install cowsay`
+  - `$ /usr/games/cowsay "Bonjour depuis un conteneur !"`
+  - **réponse** :
+    - ```txt
+        _______________________________
+        < Bonjour depuis un conteneur ! >
+        -------------------------------
+                \   ^__^
+                \   (oo)\_______
+                    (__)\       )\/\
+                        ||----w |
+                        ||     ||
+
+#### 3.3. Copier un fichier dans le conteneur
+
+- **sur podman** : `$ nano r2d2.txt` -> puis copie-colle le contenu dans le fichier
+- **sur podman** : `$ mkdir ~/tp-conteneurs && mv r2d2.txt ~/tp-conteneurs`
+- **sur podman** : `$ podman container cp ~/tp-conteneurs/r2d2.cow mon_premier_conteneur:/root/`
+- **sur le container** : `$ cd root && ls` ; **réponse** : ` r2d2.txt`
+- **sur le container** : `$ /usr/games/cowsay -f /root/r2d2.cow "Beep. boop."`
+    - **réponse** :
+      - ```
+        _____________
+        < Beep. boop. >
+        -------------
+          \         ___
+           \       /() \
+            \    _|_____|_
+                | | === | |
+                |_|  O  |_|
+                ||  O  ||
+                ||__*__||
+                |~ \___/ ~|
+                /=\ /=\ /=\
+                [_] [_] [_]
+
+#### 3.4. Stopper, lister et supprimer le conteneur
+
+- **sur le container** : `$ exit`
+- **sur podman** : 
+  - `$ podman container list --all`
+    - **réponse** :
+      - ```
+        CONTAINER ID  IMAGE                           COMMAND     CREATED         STATUS                     PORTS       NAMES
+        57dcefd0cd59  docker.io/library/ubuntu:24.04  /bin/bash   26 minutes ago  Exited (0) 12 seconds ago              mon_premier_conteneur
+  - `$ podman container rm mon_premier_conteneur` 
+  - `$ podman container list --all`
+    - **réponse** :
+      - ```
+        CONTAINER ID  IMAGE       COMMAND     CREATED     STATUS      PORTS       NAMES
+
+### 4. Exercice : Asciidoctor depuis un conteneur Alpine
+
+#### 4.2. Questions
+1. Préparez et exécutez une commande pour créer le conteneur Alpine souhaité (cf l’énoncé plus haut), avec les options nécessaires pour lui donner le nom alpine_asciidoctor et permettre les interactions clavier avec le conteneur. On utilisera l’image de conteneur accessible par l’étiquette 3.22.
+
+  - **sur podman** : `$ podman container run --name alpine_asciidoctor --tty --interactive docker.io/alpine:3.22`
+
+2. Une fois dans le conteneur, exécutez les commandes nécessaires pour installer asciidoctor. Vérifiez que l’outil est bien installé en l’exécutant avec l’option --version.
+
+  - **sur le container** : `$ apk add asciidoctor && asciidoctor --version`
+    - **réponse** :
+      - ```txt
+        Asciidoctor 2.0.23 [https://asciidoctor.org]
+        Runtime Environment (ruby 3.4.4 (2025-05-14 revision a38531fd3f) +PRISM [x86_64-linux-musl]) (lc:UTF-8 fs:UTF-8 in:UTF-8 ex:UTF-8)
+
+3. Sur votre poste de travail, préparez un fichier financiers.adoc contenant la recette de financiers montrée en exemple plus haut.
+
+  - **sur podman** : `$ nano financiers.adoc` -> puis copie colle le contenu
+
+4. À l’aide d’un second terminal, copiez financiers.adoc au sein de votre conteneur.
+
+  - **sur podman** : `$ podman container cp financiers.adoc alpine_asciidoctor:/`
+
+5. Dans votre conteneur, exécutez asciidoctor de manière à convertir le fichier financiers.adoc en HTML. Utilisez ls pour vérifier que vous avez bien produit un fichier financiers.html
+
+  - **sur le container** : `$ asciidoctor financiers.adoc && ls` ; **résultat** : `financiers.adoc financiers.html`
+
+6. À l’aide d’un second terminal, copiez le fichier financiers.html depuis conteneur, vers l’environnement de déploiement.
+
+  - **sur podman** : `$ podman container cp alpine_asciidoctor:/financiers.html ~/tp-conteneurs/`
+
+7. Vérifiez avec ls que vous avez bien récupéré le fichier qui était dans le conteneur.
+
+  - **sur podman** : `$ ls ~/tp-conteneurs` ; **réponse** : `financiers.html  r2d2.cow`
+
+8. Quittez le conteneur, puis supprimez le.
+
+  - **sur le container** : `$ exit`
+  - **sur podman** : `$ podman container rm alpine_asciidoctor`
+
+9. Selon vous, qu’est devenu le fichier financiers.adoc que vous aviez copié au sein du conteneur ?
+
+    - L'image du conteneur est supprimé ainsi que tout ce que l'on a mit dedans, le principe de l'isolement.
+
+### 5. Tutoriel : utiliser un conteneur pour déployer replace_string
+#### 5.1. Stratégie 1 : depuis une image de base Ubuntu
+
+- **sur podman** : `$ podman container run -ti --name replace_string_container docker.io/ubuntu:24.04`
+- **sur le container** : `$ apt update && apt install -y python3`
+- **sur podman** : `$ podman container cp small_programs/1_replace_string replace_string_container:/`
+- **sur le container** : `$ python3 replace_string.py -s uwus -r birds song.txt` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `$ podman container rm replace_string_container`
+
+#### 5.2. Stratégie 2 : depuis une image de base Python
+
+- **sur podman** :
+  - `$ podman container run -ti --name replace_string_container_v2 docker.io/python:3-slim bash`
+  - `$ podman container cp small_programs/1_replace_string replace_string_container:/`
+- **sur le container** : `$ python3 1_replace_string/replace_string.py -s birds -r uwus 1_replace_string/song.txt` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `$ podman container rm replace_string_container`
+
+### 6. Exercice : utiliser des conteneurs pour déployer différents programmes
+#### 6.1. compress_file
+
+- **sur podman** : `$ podman container run -ti --name compress_file docker.io/python:latest bash`
+- **sur le container** : `$ python --version` ; **réponse** : `Python 3.14.0`
+- **sur podman** : 
+  - `$ podman container cp small_programs/2_rcompress_file compress_file:/`
+  - `$ podman container cp tp-decouverte-server/hello.txt compress_file:/`
+- **sur le container** : `$ python3 2_compress_file/compress_file.py -o TEST_COMPRESSION hello.txt` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `podman container rm compress_file`
+
+#### 6.2. print_colored_string
+
+- **sur podman** : 
+  - `$ podman container run -ti --name print_colored_string docker.io/python:latest bash`
+  - `$ podman container cp small_programs/3_print_colored_string print_colored_string:/`
+- **sur le container** : 
+  - `$ python3 -m venv .venv`
+  - `$ pip install colored`
+  - `$ python3 3_print_colored_string/print_colored_string.py -b green -c red "It's a trap!"` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `podman container rm print_colored_string`
+
+#### 6.4. TicTacToe
+
+- **sur podman** :
+  - `$ podman container run -ti --name tictacttoe docker.io/eclipse-temurin bash`
+  - `$ podman container cp small_programs/4_tictactoe tictactoe:/`
+- **sur le container** :
+  - `$ cd 4_tictactoe/`
+  - `$ javac TictTacToe.java`
+  - `$ java TicTacToe` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `$ podman container rm tictactoe`
+
+#### 6.5 economic_dispatch
+
+- **sur podman** :
+  - `$ podman container run -ti --name dispatch docker.io/julia:1.11-trixie bash`
+  - `$ podman container cp small_programs/5_economic_dispatch/ dispatch:/`
+  - `$ nano input_file.jl` -> puis copie-colle le contenu de l'exemple dans le fichier
+  - `$ podman container cp input_file.jl dispatch:/`
+- **sur le container** :
+  - `$ julia -e 'import Pkg; Pkg.add("JuMP")'`
+  - `$ julia -e 'import Pkg; Pkg.add("HiGHS")'`
+  - `julia 5_economic_dispatch/economic_dispatch.julia input_file.jl`
+ -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `$ podman container rm dispatch`
+
+## TP3 Montage de répertoires/fichiers
+
+### 3. Tutoriel : premiers montages dans un conteneur Ubuntu
+#### 3.1. Un premier montage de répertoire
+
+- **sur podman** :
+  - `$ mkdir ~/tp-montage/tutoriel_1`
+  - `$ echo "Ce fichier a été créé en dehors du conteneur" > ~/tp-montage/tutoriel_1/mon_fichier`
+  - `$ cd ~`
+  - ```bash
+          $ podman container run --name conteneur_avec_montage \
+                --tty \
+                --interactive \
+                --mount type=bind,source="./tp-montage/tutoriel_1",target="/repertoire_montage" \
+                docker.io/ubuntu:24.04
+- **sur le container** :
+  - `$ ls /`
+    - **réponse** :
+    - ```bash
+      bin   dev  home  lib64  mnt  proc                root  sbin  sys  usr
+      boot  etc  lib   media  opt  repertoire_montage  run   srv   tmp  var
+  - `$ cd /repertoire_montage`
+  - `$ ls` **réponse** `mon_fichier`
+  - `$ cat mon_fichier` **réponse** : `Ce fichier a été créé en dehors du conteneur`
+
+#### 3.2. Deux répertoires très très liés
+
+- **sur podman** : `$ nano ./mon_fichier` -> ajout de `ceci est un test`
+- **sur le container** :
+  - `$ cat mon_fichier`
+    - **réponse** :
+    - ```txt
+      Ce fichier a été créé en dehors du conteneur
+      Ceci est un test
+  - `$ echo "Ceci est un second fichier" > ./mon_second_fichier`
+- **sur podman** :
+  - `$ ls` **réponse** : `mon_fichier  mon_second_fichier`
+  - `$ cat mon_second_fichier` **réponse** : Ceci est un second fichier
+
+#### 3.3. Un montage de fichier
+
+- **sur podman** : 
+  - `$ echo "Ce fichier va être monté dans un conteneur" > ~/tp-montage/tutoriel_1/mon_troisième_fichier`
+  - ```bash
+          $ podman container run --name conteneur_avec_montage_2 \
+                    --tty \
+                    --interactive \
+                    --mount type=bind,source="./tp-montage/tutoriel_1/mon_troisième_fichier",target="/root/fichier_dans_conteneur" \
+                    docker.io/ubuntu:24.04
+- **sur le container** : 
+  - `$ cd /root`
+  - `$ ls` **réponse** : `fichier_dans_mon_conteneur`
+  - `$ cat fichier_dans_conteneur` **réponse** : `Ce fichier va être monté dans un conteneur`
+
+### 4. Ménage
+
+- **sur podman** :
+  - `$ podman container rm  conteneur_avec_montage_2`
+  - `$ podman container rm conteneur_avec_montage`
+
+### 5. Exercice : faciliter l’usage du conteneur Asciidoc avec un montage
+#### 5.2. Questions
+
+podman container run --name alpine_asciidoctor --tty --interactive docker.io/alpine:3.22`
+
+- **sur podman** : 
+  - `$ cd ~/tp-montage`
+  - `$ mkdir tp_3_asciidoc`
+  - ```bash
+          $ podman container run --name alpine_asciidoctor \
+                    --tty \
+                    --interactive \
+                    --mount type=bind,source="~/tp-montage/tp_3_asciidoc",target="/main" \
+                    docker.io/alpine:3.22
+- **sur le container** : `$ apk add asciidoctor && asciidoctor --version` -> ok
+- **sur podman** : 
+  - `$ cd ~`
+  - `$ cp ~/financiers.adoc tp-montage/tp_3_asciidoc`
+- **sur le container** :
+  - `$ cd main`
+  - `$ ls` **réponse** : `financiers.adoc`
+  - `$ asciidoctor financiers.adoc`
+  - `$ ls` **réponse** : `financiers.adoc  financiers.html`
+- **sur podman** : `$ ls tp-montage/tp_3_asciidoc` **réponse** : `financiers.adoc  financiers.html`
+- **sur le container** : `$ exit`
+- **sur podman** : `$ podman container rm alpine_asciidoctor`
+
+### 6. Exercice : faciliter le déploiement de `economic_dispatch`
+#### 6.2. Questions
+
+- **sur podman** : 
+  - `$ mkdir ~/tp-montage/tp_3_ed`
+  - `cp ~/small_programs/5_economic_dispatch/economic_dispatch.julia ~/tp-montage/tp_3_ed/`
+  - `$ cp ~/input_file.jl ~/tp-montage/tp_3_ed`
+  - ```bash
+          $ podman container run --name economic_dispatch \
+                    --tty \
+                    --interactive \
+                    --mount type=bind,source="~/tp-montage/tp_3_ed",target="/main" \
+                    docker.io/julia:1.11-trixie \
+                    bash
+- **sur le container** :
+  - `$ julia -e 'import Pkg; Pkg.add("JuMP")'`
+  - `$ julia -e 'import Pkg; Pkg.add("HiGHS")'`
+  - `julia 5_economic_dispatch/economic_dispatch.julia input_file.jl` -> tout fonctionne ; donc `$ exit`
+- **sur podman** : `$ podman container rm economic_dispatch`
+
+### 7. Exercice : déployer le logiciel docker-ffmpeg-converter
+
+- **sur la machine** :  Téléchargement de la vidéo puis `$ scp Téléchargements/Schlossbergbahn.webm podman:~/`
+- **sur podman** : 
+  - `$ mkdir tp-montage/ffmpeg`
+  - `$ mkdir tp-montage/ffmpeg/source`
+  - `$ mkdir tp-montage/ffmpeg/destination`
+  - ```bash
+          $ podman container run --name ffmpeg \
+                    --tty \
+                    --interactive \
+                    --mount type=bind,source="~/tp-montage/ffmpeg/source",target="/source" \
+                    --mount type=bind,source="~/tp-montage/ffmpeg/destination",target="/destination" \
+                    --env SOURCE_DIRECTORY_PATH=/source \
+                    --env DESTINATION_DIRECTORY_PATH=/destination \
+                    --env GLOB_PATTERNS=*.webm \
+                    --env FFMPEG_ARGS=-loglevel error -y -fflags +genpts -i %s -r 24 %s.mp4 \
+                    ghcr.io/kennethwussmann/docker-ffmpeg-converter:1.2.0 bash
+  - `$ mv ~/Schlossbergbahn ~/tp-montage/ffmpeg/source`
+  - `$ ls ~/tp-montage/ffmpeg/destination` **réponse** : `Schlossbergbahn.mp4`
+  - `$ scp podman:~/tp-montage/ffmpeg/destinationSchlossbergbahn.mp4 ~/`
+
+## TP4 Publication de ports réseaux
+### 1. Tutoriel : déployer un serveur web nginx avec publication de port
+#### 1.1. Exécution avec publication de port
+
+> MUDET Anthony Début : 8760 | Fin : 8769
+
+- **sur podman** :
+  - ```bash
+          podman container run --rm \
+                       --detach \
+                       --name serveur_web_1 \
+                       --publish 8760:80 \
+                       docker.io/nginx:1.25
+  - `$ podman container ps`
+    - **réponse** :
+    - ```bash
+          CONTAINER ID  IMAGE                         COMMAND               CREATED         STATUS         PORTS                 NAMES
+          d77eab3f389f  docker.io/library/nginx:1.25  nginx -g daemon o...  20 seconds ago  Up 21 seconds  0.0.0.0:8760->80/tcp  server_web_1
+  - `$ podman container port serveur_web_1` **réponse** : 80/tcp -> 0.0.0.0:8760
+  - `$ podman container logs serveur_web_1`
+  - On va à l'url `http://podman:8760/` -> tout fonctionne
+  - `$ podman container stop serveur_web_1`
+
+#### 1.2. Exécution avec montage de répertoire
+
+- **sur podman** :
+  - `$ mkdir tp3 && cd tp3`
+  - `$ nano index.html` et on ajoute le contenu :
+    - ```html
+          <!DOCTYPE html>
+          <html>
+
+          <head>
+              <meta charset="utf-8">
+              <title>Premier déploiement</title>
+          </head>
+
+          <body>
+              <h1>Bienvenue !</h1>
+              <p>Ce déploiement a été réalisé par Anthony MUDET</p>
+              <p>Si vous voyez cette page, c'est que tout a bien fonctionné.</p>
+          </body>
+
+          </html>
+  - `$ pwd index.html` **réponse** : `/comptes/E253432U/tp4`
+  - ```bash
+          podman container run --rm \
+                       --detach \
+                       --name serveur_web_2 \
+                       --publish 8760:80 \
+                       --mount type=bind,source="/comptes/E253432U/tp4",target="/usr/share/nginx/html" \
+                       docker.io/nginx:1.25
+  - On va à l'url `http://podman:8760/` -> tout fonctionne
+
+#### 1.3. Exécution de commandes dans un conteneur déjà en exécution
+- **sur podman** : `$ podman container exec -ti serveur_web_2 bash`
+- **sur le container** :
+  - `$ ls /usr/share/nginx/html` **réponse** : `index.html`
+  - `$ cat /usr/share/nginx/html/index.html`
+    - **réponse** :
+    - ```html
+          <!DOCTYPE html>
+          <html>
+
+          <head>
+              <meta charset="utf-8">
+              <title>Premier déploiement</title>
+          </head>
+
+          <body>
+              <h1>Bienvenue !</h1>
+              <p>Ce déploiement a été réalisé par Anthony MUDET</p>
+              <p>Si vous voyez cette page, c'est que tout a bien fonctionné.</p>
+          </body>
+
+          </html>
+  - `$ exit`
+
+### 2. Exercice : déployer un service Gokapi avec publication de port
+#### 2.1. Préparation de l'environnement
+- **sur podman** :
+  - `$ mkdir -p ~/gokapi_data`
+  - `$ mkdir -p ~/gokapi_config`
+
+#### 2.2. Déploiement du conteneur
+- **sur podman** :
+  - `$ podman run -d \
+      --name gokapi_instance \
+      -p 8760:53842 \
+      -v ~/gokapi_data:/app/data:Z \
+      -v ~/gokapi_config:/app/config:Z \
+      docker.io/f0rc3/gokapi:v2.1.0`
+
+#### 2.3. Configuration via le Navigateur
+
+On va à l'adresse `http://localhost:8760/setup/` et on rempli les champs avec username : `admin` et password : `my_password`
+
+On va maintenant à l'adresse `http://localhost:8760/login` et on entre les credentials puis on upload l'image
+
+#### 2.4. Test de persistance
+
+- **sur podman** : 
+  - `$ podman container stop gokapi_instance`
+  - `$ podman container rm gokapi_instance`
+  - ```bash
+          $ podman run -d \
+              --name gokapi_instance \
+              -p 8760:53842 \
+              -v ~/gokapi_data:/app/data:Z \
+              -v ~/gokapi_config:/app/config:Z \
+              docker.io/f0rc3/gokapi:v2.1.0
+
+#### 2.5. Vérification finale
+
+- On va à l'adresse `http://localhost:8760/login` et on entre les credentials puis on vérifie que l'image est toujours là.
+
+#### 2.6. Nettoyage
+
+Tout fonctionne, on peut donc nettoyer :
+- **sur podman** :
+  - `$ podman container stop gokapi_instance`
+  - `$ podman container rm gokapi_instance`
+  - `$ rm -rf ~/gokapi_data`
+  - `$ rm -rf ~/gokapi_config`
+
+### 3. Exercice : déployer un service Kanboard avec publication de port
+#### 3.1. Préparation
+
+- **sur podman** :
+  - `$ mkdir -p ~/kanboard_data`
+  - `$ chmod 777 ~/kanboard_data`
+
+#### 3.2. Déploiement du conteneur
+- **sur podman** :
+  - ```bash
+          $ podman run -d \
+              --name kanboard_instance \
+              -p 8761:80 \
+              -v ~/kanboard_data:/var/www/app/data:Z \
+              docker.io/kanboard/kanboard:v1.2.32
+
+#### 3.4. Utilisation et test
+- On va à l'adresse `http://localhost:8761/` et on se connecte avec username : `admin` et password : `admin`
+- On créer un nouveau projet avec le nom `TP4` et on sauvegarde
+- On va sur le board du projet et on crée une nouvelle tâche `Faire le TP4 de DevOps`
+- On glisse et dépose la tâche dans la colonne `Ready`
+
+#### 3.5 Test de persistance
+- **sur podman** : 
+  - `$ podman container stop kanboard_instance`
+  - `$ podman container rm kanboard_instance`
+  - ```bash
+          $ podman run -d \
+              --name kanboard_instance \
+              -p 8761:80 \
+              -v ~/kanboard_data:/var/www/app/data:Z \
+              docker.io/kanboard/kanboard:v1.2.32
+
+#### 3.6. Vérification finale
+- On va à l'adresse `http://localhost:8761/` et on se connecte avec username : `admin` et password : `admin`
+- On vérifie que le projet `TP4` est toujours là avec la tâche `Faire le TP4 de DevOps`
+
+#### 3.7. Nettoyage
+- **sur podman** :
+  - `$ podman container stop kanboard_instance`
+  - `$ podman container rm kanboard_instance`
+  - `$ rm -rf ~/kanboard_data`
+
+### 4. Exercices supplémentaires
+
+#### 4.0. Tunnel SSH
+
+- **sur la machine** : `$ ssh -L 8760:127.0.0.1:8760 -L 8761:127.0.0.1:8761 -L 8762:127.0.0.1:8762 E253432U@podman.ensinfo.sciences.univ-nantes.prive`
+
+#### 4.1. Déploiement du serveur IRC (InspIRCd)
+
+- **sur podman** :
+  - `mkdir ~/inspircd_data ~/inspircd_config`
+  - ```bash
+          $ podman run -d \
+            --name inspircd_server \
+            -p 8762:6667 \
+            -v ~/inspircd_config:/inspircd/conf:Z \
+            -v ~/inspircd_data:/inspircd/data:Z \
+            docker.io/inspircd/inspircd-docker
+
+---
+
+- Développement et Exploitation - DevOps DataOps
+- Master 1 Informatique
+- Nantes Université
+- 2025 - 2026
+- Anthony MUDET - M1 Informatique parcours SMART Computing
