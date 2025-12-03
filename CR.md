@@ -728,7 +728,295 @@ Tout fonctionne, on peut donc nettoyer :
             -p 8762:6667 \
             -v ~/inspircd_config:/inspircd/conf:Z \
             -v ~/inspircd_data:/inspircd/data:Z \
-            docker.io/inspircd/inspircd-docker
+            docker.io/inspircd/inspircd-docker:latest
+
+##### B - Test avec le client kirc
+
+- **sur la machine** :
+  - `$ wget https://github.com/mcpcpc/kirc/releases/download/0.3.2/kirc`
+  - `$ chmod +x kirc`
+
+##### C - Connexion au serveur IRC
+
+- **sur la machine** : `$ ./kirc -s localhost -p 8762 -c`
+
+#### 4.2. Déploiement de Automatic-Image-Converter
+
+- **sur podman** :
+  - `$ mkdir -p ~/aic_input ~/aic_output`
+  - ```bash
+          $ podman run -d \
+              --name aic_instance \
+              -p 8763:8080 \
+              -v ~/aic_input:/input:Z \
+              -v ~/aic_output:/output:Z \
+              docker.io/kennethwussmann/automatic-image-converter:latest
+
+##### D - Test de conversion d’image
+
+- **sur la machine** : `$ scp -P 22 test.jpg E253432U@podman.ensinfo.sciences.univ-nantes.prive:~/aic_input/`
+- **sur podman** : `$ ls -l ~/aic_output/` **réponse** : `test.png` -> tout fonctionne
+
+##### E - Nettoyage
+
+- **sur podman** :
+  - `$ podman container stop inspircd_server aic_instance`
+  - `$ podman container rm inspircd_server aic_instance`
+  - `$ rm -rf ~/inspircd_data ~/inspircd_config ~/aic_input ~/aic_output`
+
+## TP5 Mise en réseau de plusieurs conteneurs
+### 1. Tutoriel : premiers réseaux virtuels
+#### 1.1. Deux conteneurs sur un même réseau virtuel
+##### 1.1.1. Mise en place
+
+- **sur podman (terminal 1)** : 
+  - `$ podman network create r1`
+  - `$ podman container run --name conteneurA --rm -ti --network r1 docker.io/alpine:3.22 bash`
+
+- **sur le containerA (terminal 1)** : `$ apk update && apk add netcat-openbsd`
+
+- **sur podman (terminal 2)** : `$ podman container run --name conteneurB --rm -ti --network r1 docker.io/alpine:3.22 bash`
+
+- **sur le containerB (terminal 2)** : `$ apk update && apk add netcat-openbsd`
+
+##### 1.1.2. Test de communication
+
+- **sur le containerA (terminal 1)** : `$ nc -l -p 8760`
+- **sur le containerB (terminal 2)** : `$ nc conteneurA 8760` puis tape `Salut depuis le conteneur B !` et appuie sur Entrée
+- **sur le containerA (terminal 1)** : on voit apparaître `Salut depuis le conteneur B !`
+
+#### 1.2. Trois conteneurs sur deux réseaux virtuels
+##### 1.2.1. Configuration des réseaux
+
+- **sur podman (terminal 3)** : `$ podman network create r2`
+- **sur podman (terminal 2)** : `$ podman container run --name conteneurB --rm -ti --network r1 --network r2 docker.io/alpine:3.22 bash`
+- **sur le containerB (terminal 2)** : `$ apk update && apk add netcat-openbsd`
+- **sur podman (terminal 3)** : `$ podman container run --name conteneurC --rm -ti --network r2 docker.io/alpine:3.22 bash
+- **sur le containerC (terminal 3)** : `$ apk update && apk add netcat-openbsd`
+
+##### 1.2.2. Test de cloisonnement
+1. Le pivot (B peut parler à tout le monde)
+- **sur le containerA (terminal 1)** : `$ nc -l -p 8760`
+- **sur le containerC (terminal 3)** : `$ nc -l -p 8760`
+- **sur le containerB (terminal 2)** : `$ nc conteneurA 8760` puis tape `Salut depuis le conteneur B vers A !` et appuie sur Entrée
+- **sur le containerA (terminal 1)** : on voit apparaître `Salut depuis le conteneur B vers A !`
+- **sur le containerB (terminal 2)** : `$ nc conteneurC 8760` puis tape `Salut depuis le conteneur B vers C !` et appuie sur Entrée
+- **sur le containerC (terminal 3)** : on voit apparaître `Salut depuis le conteneur B vers C !`
+
+2. L’isolation (A ne peut pas parler à C)
+- **sur le containerC (terminal 3)** : `$ nc -l -p 8760`
+- **sur le containerA (terminal 1)** : `$ nc conteneurC 8760` puis tape `Salut depuis le conteneur A vers C !` et appuie sur Entrée
+- **sur le containerC (terminal 3)** : rien
+
+#### 1.3. Nettoyage
+- **sur podman (terminal 1)** : `$ podman network rm r1`
+- **sur podman (terminal 3)** : `$ podman network rm r2`
+
+### 2. Tutoriel : déployer un service Mealie à l’aide d’un réseau virtuel
+#### 2.1. Réseau virtuel
+
+- **sur podman** : 
+  - `$ podman network create mealie_network`
+  - `$ mkdir -p ~/mealie_deployment/db-data`
+  - `$ cd ~/mealie_deployment`
+
+#### 2.2. Déploiement de la base de données PostgreSQL
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mealie_db \
+              --network mealie_network \
+              --mount type=bind,source="$(pwd)/db-data",target="/var/lib/postgresql/data" \
+              --env POSTGRES_USER=mealie \
+              --env POSTGRES_PASSWORD=mealie_password \
+              --env POSTGRES_DB=mealie_data \
+              docker.io/postgres:16
+
+#### 2.3. Déploiement de Mealie
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mealie \
+              --network mealie_network \
+              --publish 8763:9000 \
+              --env DB_ENGINE=postgres \
+              --env POSTGRES_SERVER=mealie_db \
+              --env POSTGRES_DB=mealie_data \
+              --env POSTGRES_USER=mealie \
+              --env POSTGRES_PASSWORD=mealie_password \
+              --env POSTGRES_PORT=5432 \
+              ghcr.io/mealie-recipes/mealie:v1.0.0-RC1.1
+  - ̀`$ podman container ps` pour vérifier que les deux conteneurs sont bien en cours d’exécution.
+
+#### 2.4. Test et validation
+- On va à l'adresse `http://localhost:8763/` et on crée un compte admin avec username : `admin` et password : `mealie_admin_password`
+- Clique sur le bouton "Créer" (Create) -> "Importer depuis l'URL" (Import from URL).
+- Colle l'URL demandée : https://deliacious.com/2020/03/babka-cannelle-vegan.html
+- Clique sur "Importer la recette" (Import Recipe).
+- Vérifie que la recette apparaît dans ta liste de recettes.
+
+#### 2.5. Nettoyage
+- **sur podman** :
+  - `$ podman container stop mealie mealie_db`
+  - `$ podman network rm mealie_network`
+  - `rm -rf ~/mealie_deployment`
+
+### 3. Exercice : déployer un service Kanboard+MariaDB avec un réseau virtuel
+#### 3.1. Préparation
+
+- **sur podman** : 
+  - `$ podman network create kanboard_net`
+  - `$ mkdir -p ~/kanboard_full/db_data`
+  - `$ mkdir -p ~/kanboard_full/kb_data`
+
+#### 3.2. Déploiement de la base de données MariaDB
+
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name kanboard_db \
+              --network kanboard_net \
+              --mount type=bind,source=~/kanboard_full/db_data,target=/var/lib/mysql,Z \
+              --env MARIADB_USER=kanboard \
+              --env MARIADB_PASSWORD=secret_password \
+              --env MARIADB_DATABASE=kanboard_db \
+              --env MARIADB_ROOT_PASSWORD=root_secret \
+              docker.io/library/mariadb:11.1
+
+#### 3.3. Déploiement de Kanboard
+
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name kanboard_instance \
+              -p 8764:80 \
+              --network kanboard_net \
+              --mount type=bind,source=~/kanboard_full/kb_data,target=/var/www/app/data,Z \
+              --env DATABASE_URL="mysql://kanboard:secret_password@kanboard_db:3306/kanboard_db" \
+              docker.io/kanboard/kanboard:v1.2.32
+
+#### 3.4. Test et validation
+- On va à l'adresse `http://localhost:8764/` et on se connecte avec username : `admin` et password : `admin`
+- Clique sur l'icône de profil (en haut à droite) -> "My profile" (ou Settings/Préférences).
+- Dans le menu de gauche, clique sur "Information".
+- Cherche la ligne Database driver.
+- Vérifie que le driver affiché est bien "mysql".
+
+#### 3.5. Nettoyage
+- **sur podman** :
+  - `$ podman container stop kanboard_instance kanboard_db`
+  - `$ podman container rm kanboard_instance kanboard_db`
+  - `$ podman network rm kanboard_net`
+  - `rm -rf ~/kanboard_full`
+
+### 4. Exercice : déployer lldap, Kanboard et Mealie à l’aide de réseaux virtuels
+#### 4.1. Préparation
+
+- **sur podman** : 
+  - `$ podman network create sso_network`
+  - `$ mkdir -p ~/final_tp/lldap_data`
+  - `$ mkdir -p ~/final_tp/mkdir -p ~/final_tp/kanboard_db`
+  - `$ mkdir -p ~/final_tp/mealie_data ~/final_tp/mealie_db`
+
+#### 4.2. Déploiement de lldap
+
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name lldap_instance \
+              --network sso_network \
+              -p 8765:17170 \
+              -v ~/final_tp/lldap_data:/data:Z \
+              -e LLDAP_JWT_SECRET=secret_jwt_super_long_et_complexe \
+              -e LLDAP_KEY_SEED=secret_seed_super_long_et_complexe \
+              -e LLDAP_LDAP_BASE_DN=dc=monannuaire \
+              -e LLDAP_LDAP_USER_PASS=motdepasse \
+              docker.io/lldap/lldap:2025-10-14
+  - On ouvre un navigateur à l'adresse `http://localhost:8765/` et on crée un utilisateur admin avec username : `admin` et password : `admin_password`
+  - Clique sur "Create User".
+  - ID: etudiant / Email: etudiant@test.com / Password: superpassword.
+  - Valide et ajoute l'utilisateur au groupe "lldap_users"
+
+#### 4.3. Déploiement de Kanboard + MariaDB
+1. Déploiement de la base de données MariaDB
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name kanboard_db \
+              --network sso_network \
+              --mount type=bind,source=~/final_tp/kanboard_db,target=/var/lib/mysql,Z \
+              --env MARIADB_USER=kanboard \
+              --env MARIADB_PASSWORD=secret_password \
+              --env MARIADB_DATABASE=kanboard_db \
+              --env MARIADB_ROOT_PASSWORD=root_secret \
+              docker.io/library/mariadb:11.1
+2. Déploiement de Kanboard
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name kanboard_instance \
+              --network sso_network \
+              -p 8766:80 \
+              -v ~/final_tp/kanboard_data:/var/www/app/data:Z \
+              -e DATABASE_URL="mysql://kanboard:kb_secret@kanboard_db/kanboard" \
+              -e LDAP_AUTH=true \
+              -e LDAP_BIND_TYPE=user \
+              -e LDAP_SERVER="ldap://lldap_instance:3890" \
+              -e LDAP_USERNAME="uid=%s,ou=people,dc=monannuaire" \
+              -e LDAP_USER_BASE_DN="ou=people,dc=monannuaire" \
+              -e LDAP_USER_FILTER="uid=%s" \
+              docker.io/kanboard/kanboard:v1.2.32
+3. Test et validation : Va sur http://localhost:8766. Essaie de te connecter avec l'utilisateur créé dans l'étape 2 (etudiant / superpassword)
+
+#### 4.4. Déploiement de Mealie
+1. Déploiement de la base de données PostgreSQL
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name mealie_db \
+              --network sso_network \
+              -v ~/final_tp/mealie_db:/var/lib/postgresql/data:Z \
+              -e POSTGRES_USER=mealie \
+              -e POSTGRES_PASSWORD=mealie_secret \
+              -e POSTGRES_DB=mealie \
+              docker.io/postgres:16
+2. Déploiement de Mealie
+- **sur podman** : 
+  - ```bash
+          $ podman run -d \
+              --name mealie_instance \
+              --network sso_network \
+              -p 8767:9000 \
+              -v ~/final_tp/mealie_data:/app/data:Z \
+              -e DB_ENGINE=postgres \
+              -e POSTGRES_SERVER=mealie_db \
+              -e POSTGRES_USER=mealie \
+              -e POSTGRES_PASSWORD=mealie_secret \
+              -e POSTGRES_DB=mealie \
+              -e POSTGRES_PORT=5432 \
+              -e LDAP_AUTH_ENABLED=true \
+              -e LDAP_SERVER_URL="ldap://lldap_instance:3890" \
+              -e LDAP_BASE_DN="ou=people,dc=monannuaire" \
+              -e LDAP_QUERY_BIND="cn=admin,ou=people,dc=monannuaire" \
+              -e LDAP_QUERY_PASSWORD="motdepasse" \
+              -e LDAP_ID_ATTRIBUTE=uid \
+              -e LDAP_NAME_ATTRIBUTE=uid \
+              -e LDAP_MAIL_ATTRIBUTE=mail \
+              ghcr.io/mealie-recipes/mealie:v1.0.0-RC1.1
+3. Test et validation : Va sur http://localhost:8767. Essaie de te connecter avec etudiant / superpassword.
+
+#### 4.5. Résumé :
+1. LDAP est accessible sur localhost:8765 et contient ton user.
+2. Kanboard est accessible sur localhost:8766 et te logue via LDAP.
+3. Mealie est accessible sur localhost:8767 et te logue via LDAP.
+
+#### 4.6. Nettoyage
+- **sur podman** :
+  - `$ podman rm -f lldap_instance kanboard_instance kanboard_db mealie_instance mealie_db`
+  - `$ podman network rm sso_network`
+  - `$ podman unshare rm -rf ~/final_tp`
 
 ---
 
