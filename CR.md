@@ -764,7 +764,7 @@ Tout fonctionne, on peut donc nettoyer :
   - `$ podman container rm inspircd_server aic_instance`
   - `$ rm -rf ~/inspircd_data ~/inspircd_config ~/aic_input ~/aic_output`
 
-## TP5 Mise en réseau de plusieurs conteneurs
+## TP5 Mise en réseau de plusieurs conteneurs
 ### 1. Tutoriel : premiers réseaux virtuels
 #### 1.1. Deux conteneurs sur un même réseau virtuel
 ##### 1.1.1. Mise en place
@@ -1018,7 +1018,7 @@ Tout fonctionne, on peut donc nettoyer :
   - `$ podman network rm sso_network`
   - `$ podman unshare rm -rf ~/final_tp`
 
-## TP5 Créer manuellement des images de conteneurs
+## TP6 Créer manuellement des images de conteneurs
 ### 1. Préparatifs
 #### 1.2. Authentification podman
 - **sur podman** : `$ podman login docker-registry.univ-nantes.fr` : Username : `E253432U` + password -> Login succeeded
@@ -1105,6 +1105,441 @@ Un montage de volume est indispensable pour que le conteneur accède au fichier 
 
 4. Publication sur gitlab
   - **sur podman** : `$ podman image push localhost/exercice-asciidoctor:1.0 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/exercice-asciidoctor:1.0`
+
+### 4. Tutoriel : une image pour déployer un site web avec nginx
+#### 4.2. Création de l’image
+1. Création du conteneur template et installation
+- **sur podman** : `$ podman container run -ti --name nginx_template docker.io/nginx:1.25 bash`
+
+2. Nettoyage du dossier html :
+- **sur le container** :
+  - `$ rm /usr/share/nginx/html/*`
+
+3. Copie du site web dans le conteneur :
+- **sur podman** : `$ podman container cp test.html nginx_template:/usr/share/nginx/html/index.html`
+
+4. Verification :
+- **sur le container** : `$ ls /usr/share/nginx/html/` **réponse** : `index.html`
+
+5. Création de l’image :
+- **sur podman** : `$ podman container commit nginx_template --change 'CMD nginx -g "daemon off;"' tutoriel-nginx:1`
+
+6. Test de l’image :
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name nouveau_serveur_web \
+              --publish 8768:80 \
+              localhost/tutoriel-nginx:1
+  - On va à l'url `http://podman:8760/` -> tout fonctionne
+
+#### 4.3. Publication de l’image
+- **sur podman** : `$ podman image push tutoriel-nginx:1 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/tutoriel-nginx:1`
+
+### 5. Exercice : une image de conteneur pour economic_dispatch
+#### 5.2. Questions
+1. Faites un travail préliminaire de conception de votre future image de conteneur.
+  - Configuration : L'outil a besoin d'un fichier d'entrée (scénario JSON).
+  - Point d'entrée : L'exécution de Julia sur le script principal (main.jl).
+  - Montage : Un volume /data pour fournir le fichier JSON depuis l'hôte vers le conteneur.
+  - Commande finale : julia --project=/app /app/src/main.jl /data/scenario.json
+
+#### 5.3. Réalisation
+
+- **sur podman** : `$ podman run -ti --name dispatch_template docker.io/julia:1.11-trixie bash`
+- **dans le container** : 
+  - `$ apt update && apt install -y git`
+  - `$ git clone https://gitlab.univ-nantes.fr/bousse-e/economic_dispatch.git /app`
+  - `$ cd /app`
+  - `$ julia --project=. -e 'import Pkg; Pkg.instantiate();'`
+  - `$ exit`
+
+#### 5.4. Création de l’image
+
+- **sur podman** : `$ podman container commit dispatch_template --change 'WORKDIR /app' --change 'CMD ["julia", "--project=/app", "src/main.jl", "/data/input.json"]' exercice-economic-dispatch:a`
+
+#### 5.5. Test de l’image
+
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              exercice-economic-dispatch:a \
+              julia --project=/app src/main.jl data/example.json
+  - **réponse** : plusieurs lignes de logs -> tout fonctionne
+
+#### 5.6. Publication de l’image
+
+- **sur podman** : `$ podman image push exercice-economic-dispatch:a docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/exercice-economic-dispatch:a`
+
+### 6. Exercice : créer une image pour Web Calculator (Python)
+##### 6.2. Questions
+1. Faites un travail préliminaire de conception de votre future image de conteneur.
+  - Image de base : docker.io/python:3.11 (contient déjà Python et pip, pas besoin de venv).
+  - Installation : git pour récupérer le code, puis pip install -r requirements.txt pour les dépendances.
+  - Point d'entrée (CMD) : Lancement du serveur web Uvicorn. Important : Il faut spécifier l'hôte 0.0.0.0 pour que le conteneur accepte les connexions venant de l'extérieur (le mapping de port Podman).
+
+#### 6.3. Réalisation
+
+1. Préparation du template
+- **sur podman** : `$ podman run -ti --name webcalc_template docker.io/python:3.11 bash`
+- **dans le container** :
+  - `$ apt update && apt install -y git`
+  - `$ git clone https://gitlab.univ-nantes.fr/bousse-e/webcalculator.git /app`
+  - `$ cd /app`
+  - `$ pip install -r requirements.txt`
+  - `$ ls -R`
+  - `$ exit`
+
+2. Transformation en image
+
+- **sur podman** : 
+  - ```bash
+          podman container commit webcalc_template \
+            --change 'WORKDIR /app' \
+            --change 'CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]' \
+            webcalculator:dev
+
+3. Test de l'image
+
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mon_calculateur \
+              -p 8769:8000 \
+              localhost/webcalculator:dev
+  - On va à l'url `http://podman:8769/` -> tout fonctionne
+
+#### 6.4. Publication de l’image
+- **sur podman** : `$ podman image push localhost/webcalculator:dev docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/webcalculator:dev`
+
+## TP7 Scripter la création d’une image de conteneur
+### 3. Tutoriel : image cowsay via un Containerfile
+#### 3.2. Premier Containerfile (Version v3 - Installation simple)
+
+1. Création du Containerfile
+```Dockerfile
+# On écrit le contenu dans le fichier Containerfile
+cat > Containerfile <<EOF
+FROM docker.io/ubuntu:24.04
+RUN apt update
+RUN apt install -y cowsay
+EOF
+```
+
+2. Construction de l’image
+- **sur podman** : `$ podman build --tag tutoriel-cowsay:v3 .`
+
+3. Test de l’image
+- **sur podman** : `$ podman container run --rm -ti localhost/tutoriel-cowsay:v3`
+- **sur le container** : `$ cowsay "Bonjour le monde en v3 !" ` -> tout fonctionne ; donc `$ exit`
+
+#### 3.3. Ajout d'un point d'entrée avec CMD (Version v4)
+1. Modification du Containerfile
+```Dockerfile
+# On écrase le fichier précédent avec la nouvelle version
+cat > Containerfile <<EOF
+FROM docker.io/ubuntu:24.04
+RUN apt update
+RUN apt install -y cowsay
+CMD /usr/games/cowsay \$MESSAGE
+EOF
+```
+
+2. Construction de l’image v4
+- **sur podman** : `$ podman build --tag tutoriel-cowsay:v4 .`
+
+3. Test de l’image v4
+
+- **sur podman** : `$ podman container run --rm -ti -e MESSAGE="Bonjour le monde en v4 !" localhost/tutoriel-cowsay:v4` -> tout fonctionne
+
+### 4. Exercice : image Asciidoctor via Containerfile
+#### 4.1. Préparation
+- **sur podman** : `$ mkdir -p ~/asciidoctor-containerfile && cd ~/asciidoctor-containerfile`
+
+#### 4.2. Création du Containerfile
+```Dockerfile
+cat > Containerfile <<EOF
+FROM docker.io/alpine:3.22
+
+# Installation des dépendances
+RUN apk update && apk add asciidoctor
+
+# Définition du répertoire de travail (optionnel mais propre)
+WORKDIR /data
+
+# Commande par défaut utilisant la variable d'environnement
+CMD asciidoctor /data/\$DOC_FILE
+EOF
+```
+
+#### 4.3. Construction de l’image
+- **sur podman** : `$ podman image build --tag exercice-asciidoctor:2.0 .`
+
+#### 4.4. Test de l’image
+- **sur podman** : 
+  - ```bash
+          $ echo "= Mon Titre" > test.adoc
+          echo "Ceci est un test." >> test.adoc
+          $ cp ~/financiers.adoc ~/asciidoctor-containerfile/
+          $ podman container run --rm \
+              -v $(pwd):/data:Z \
+              -e DOC_FILE=test.adoc \
+              localhost/exercice-asciidoctor:2.0
+  - `$ ls -l test.html` -> existe
+
+#### 4.5. Publication de l’image
+- **sur podman** : `$ podman image push localhost/exercice-asciidoctor:2.0 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/exercice-asciidoctor:2.0`
+
+### 5. Tutoriel : image site web nginx via Containerfile
+#### 5.1. Préparation de l'espace de travail
+
+- **sur podman** : 
+  - `$ mkdir -p ~/nginx-containerfile`
+  - `$ cd ~/nginx-containerfile`
+  - `$ cp ~/asciidoctor-containerfile/test_v2.html ./index.html`
+
+#### 5.2. Création du Containerfile
+```Dockerfile
+cat > Containerfile <<EOF
+FROM docker.io/nginx:1.25
+
+# Suppression de la page d'accueil par défaut
+RUN rm /usr/share/nginx/html/*
+
+# Copie de notre fichier index.html dans le dossier web de Nginx
+COPY ./index.html /usr/share/nginx/html/index.html
+EOF
+```
+
+Alternative : WORKDIR 
+```Dockerfile
+FROM docker.io/nginx:1.25
+WORKDIR /usr/share/nginx/html
+RUN rm -rf ./*
+COPY ./index.html .
+```
+
+#### 5.3. Construction de l'image
+- **sur podman** : `$ podman build --tag tutoriel-nginx:2 .`
+
+#### 5.4. Exécution du conteneur
+
+- **sur podman** : 
+  - `$ podman rm -f nouveau_serveur_web` (si déjà existant)
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name nouveau_serveur_web \
+              --publish 8770:80 \
+              localhost/tutoriel-nginx:2
+- On va à l'url `http://podman:8770/` -> tout fonctionne
+
+### 6. Exercice : créer une image pour Web Calculator (Python)
+#### 6.2. Préparatifs
+- **sur podman** : 
+  - `$ mkdir -p ~/webcalc-containerfile`
+  - `$ cd ~/webcalc-containerfile`
+  - `$ git clone https://gitlab.univ-nantes.fr/bousse-e/webcalculator.git ./`
+  - `$ cd webcalculator`
+
+#### 6.3. Création du Containerfile
+```Dockerfile
+cat > Containerfile <<EOF
+# Image de base officielle Python
+FROM docker.io/python:3.11
+
+# Définition du répertoire de travail dans le conteneur
+WORKDIR /app
+
+# Copie des fichiers du projet (hôte) vers le conteneur
+COPY . /app
+
+# Installation des dépendances Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Commande de démarrage (Serveur Web)
+# --host 0.0.0.0 est CRUCIAL pour que le conteneur accepte les connexions externes
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EOF
+```
+
+#### 6.4. Construction de l’image
+- **sur podman** : `$ podman build --tag webcalculator:prod .`
+
+#### 6.5. Test de l’image
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mon_calculateur_prod \
+              -p 8771:8000 \
+              localhost/webcalculator:prod
+  - On va à l'url `http://podman:8771/` -> tout fonctionne
+
+#### 6.6. Publication de l’image
+- **sur podman** : `$ podman image push localhost/webcalculator:prod docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/webcalculator:prod`
+
+### 7. Exercice : créer une image webdav-embedded-server (Java)
+#### 7.2. Préparatifs
+- **sur podman** : 
+  - `$ mkdir -p ~/webdav-containerfile`
+  - `$ cd ~/webdav-containerfile`
+  - `$ git clone https://gitlab.univ-nantes.fr/bousse-e/webdav-embedded-server.git`
+  - `$ cd webdav-embedded-server`
+
+#### 7.3. Création de l'image
+
+Points clés de la conception :
+- Image de base : gradle:8-jdk17 (contient tout le nécessaire pour compiler).
+- Proxy : Indispensable pour la commande gradle fatJar (sinon Gradle ne pourra pas télécharger les dépendances depuis Internet).
+- Entrée : On utilise des variables d'environnement (ENV) pour rendre l'utilisateur et le mot de passe configurables au démarrage.
+
+* Construction de l'image via un Containerfile :
+
+```Dockerfile
+# Image de base contenant Gradle et Java
+FROM docker.io/gradle:8-jdk17
+
+# Répertoire de travail
+WORKDIR /app
+
+# Copie des sources
+COPY . .
+
+# Compilation avec configuration du PROXY de l'université
+# C'est ici qu'on injecte les drapeaux -Dhttps.proxyHost...
+RUN gradle -Dhttps.proxyHost=proxy.ensinfo.sciences.univ-nantes.prive -Dhttps.proxyPort=3128 fatJar
+
+# Création du dossier de stockage des données
+RUN mkdir /data
+
+# Variables d'environnement par défaut (surchargeables au run)
+ENV WEBDAV_USER=admin
+ENV WEBDAV_PASS=admin
+
+# Port exposé par le conteneur
+EXPOSE 8080
+
+# Lancement du serveur
+# On pointe vers le FatJar généré dans build/libs/
+CMD java -jar build/libs/webdav-embedded-server-0.2.1-SNAPSHOT-fatjar.jar --credentials "\$WEBDAV_USER:\$WEBDAV_PASS" --port 8080 /data
+```
+
+* Construction de l'image :
+- **sur podman** : `$ podman image build --tag webdavserver:latest .`
+
+* Déploiement et Test :
+- **sur podman** : 
+  - `mkdir -p ~/webdav-data`
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mon_webdav \
+              -p 8770:8080 \
+              -v ~/webdav_data:/data:Z \
+              -e WEBDAV_USER=etudiant \
+              -e WEBDAV_PASS=supersecret \
+              localhost/webdavserver:latest
+  - On va à l'url `http://podman:8772/` -> tout fonctionne (login : etudiant / superpassword)
+
+* Publication de l’image
+- **sur podman** : `$ podman image push localhost/webdavserver:latest docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/webdavserver:latest`
+
+#### 7.4. Amélioration de l'image
+
+Pourquoi l'image actuelle est-elle "mauvaise" ? Si vous faites podman image list, vous verrez que l'image webdavserver fait probablement plus de 600 Mo (voire 800 Mo).
+- Raison : Elle contient le code source, Gradle, le cache de compilation, et tout le JDK (compilateur Java).
+- Besoin réel : Pour exécuter le programme, on a juste besoin d'un JRE (Java Runtime Environment) et du fichier .jar final.
+Solution : Le Multi-stage Build On utilise une image pour compiler (Stage 1), et on copie uniquement le résultat dans une image finale très légère (Stage 2).
+
+* Nouveau Containerfile avec Multi-stage Build :
+
+```Dockerfile
+# --- Étape 1 : Builder (Grosse image avec outils) ---
+FROM docker.io/gradle:8-jdk17 AS builder
+WORKDIR /app
+COPY . .
+RUN gradle -Dhttps.proxyHost=proxy.ensinfo.sciences.univ-nantes.prive -Dhttps.proxyPort=3128 fatJar
+
+# --- Étape 2 : Runner (Petite image juste pour exécuter) ---
+FROM docker.io/eclipse-temurin:17-jre-alpine
+WORKDIR /app
+
+# On copie UNIQUEMENT le jar depuis l'étape 1
+COPY --from=builder /app/build/libs/webdav-embedded-server-0.2.1-SNAPSHOT-fatjar.jar /app/server.jar
+
+RUN mkdir /data
+ENV WEBDAV_USER=admin
+ENV WEBDAV_PASS=admin
+
+CMD ["java", "-jar", "/app/server.jar", "--credentials", "\$WEBDAV_USER:\$WEBDAV_PASS", "--port", "8080", "/data"]
+```
+
+### 8. Exercice : créer une image WordcloudGenerator (langage R)
+#### 8.2. Préparatifs
+- **sur podman** : 
+  - `$ mkdir -p ~/wordcloud-containerfile`
+  - `$ cd ~/wordcloud-containerfile`
+  - `$ git clone https://gitlab.univ-nantes.fr/bousse-e/wordcloud-generator.git`
+  - `$ cd wordcloud-generator`
+
+#### 8.3. Conception et Création du Containerfile
+1. Image de base : docker.io/r-base:latest. C'est une image basée sur Debian.
+2. Installation de libxml2 : Puisque c'est une base Debian, on utilise apt. Il faut installer libxml2-dev (la version de développement) pour pouvoir compiler les paquets R qui en dépendent.
+3. Paquets R : On utilise install.packages via Rscript.
+4. Point d'entrée : On lance R pour exécuter l'application Shiny sur le port 8000 et l'hôte 0.0.0.0.
+
+* Containerfile :
+
+```Dockerfile
+FROM docker.io/r-base:latest
+
+# Installation des dépendances système (bibliothèque C requise pour le package XML)
+# On nettoie le cache apt à la fin pour réduire la taille de l'image
+RUN apt-get update && apt-get install -y \
+    libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Répertoire de travail
+WORKDIR /app
+
+# Copie du code source
+COPY . /app
+
+# Installation des paquets R nécessaires
+# Attention : Cette étape est longue car elle compile les sources
+RUN Rscript -e 'install.packages(c("shiny", "tm", "wordcloud", "memoise", "XML"), repos="http://cran.rstudio.com/")'
+
+# Exposition du port
+EXPOSE 8000
+
+# Commande de démarrage
+# On lance l'application Shiny sur le port 8000 et on écoute sur toutes les interfaces (0.0.0.0)
+CMD ["R", "-e", "shiny::runApp('/app', port=8000, host='0.0.0.0')"]
+```
+
+#### 8.4. Construction de l’image
+- **sur podman** : `$ podman build --tag wordcloudgenerator:latest .`
+
+#### 8.5. Test de l’image
+- **sur podman** : 
+  - ```bash
+          $ podman container run --rm \
+              --detach \
+              --name mon_wordcloud \
+              -p 8773:8000 \
+              localhost/wordcloudgenerator:latest
+  - On va à l'url `http://podman:8773/` -> tout fonctionne
+
+#### 8.6. Publication de l’image
+- **sur podman** : `$ podman image push localhost/wordcloudgenerator:latest docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/wordcloudgenerator:latest`
+
+#### 8.7. Nettoyage
+- **sur podman** :
+  - `$ podman stop mon_wordcloud`
+  - `$ podman rmi wordcloudgenerator:latest`
 
 ---
 
