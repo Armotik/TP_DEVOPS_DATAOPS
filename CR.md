@@ -1018,6 +1018,94 @@ Tout fonctionne, on peut donc nettoyer :
   - `$ podman network rm sso_network`
   - `$ podman unshare rm -rf ~/final_tp`
 
+## TP5 Créer manuellement des images de conteneurs
+### 1. Préparatifs
+#### 1.2. Authentification podman
+- **sur podman** : `$ podman login docker-registry.univ-nantes.fr` : Username : `E253432U` + password -> Login succeeded
+
+### 2. Tutoriel : une première image Ubuntu avec cowsay
+#### 2.2. Création de l'image (v1)
+1. On lance le container modèle :
+- **sur podman** : `$ podman container run -ti --name cowsay_template docker.io/ubuntu:24.04`
+
+2. On installe cowsay dans le container modèle :
+- **sur le container** :
+  - `$ apt update && apt install -y cowsay`
+  - `$ exit`
+
+3. Créer l'image :
+- **sur podman** : `$ podman container commit cowsay_template tutoriel-cowsay:v1`
+
+4. Vérification de la creation :
+- **sur podman** : 
+  - `$ podman image ls | grep tutoriel-cowsay`
+    - **réponse** :
+    - ```bash
+          REPOSITORY                                       TAG          IMAGE ID      CREATED             SIZE
+          localhost/tutoriel-cowsay                        v1           fc7a1fa489d2  About a minute ago  189 MB
+
+5. Test de l'image :
+  - **sur podman** : `$ podman container run -ti tutoriel-cowsay:v1 bash`
+  - **sur le container** : `$ cowsay "Bonjour le monde !" ` -> tout fonctionne ; donc `$ exit`
+
+#### 2.3. Publication de l'image
+1. Publication de l'image sur le registre distant :
+   - **sur podman** : `$ podman push tutoriel-cowsay:v1 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/tutoriel-cowsay:v1`
+
+2. Vérification de la publication :
+    - **sur podman** : `$ podman container run -ti docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/tutoriel-cowsay:v1` -> tout fonctionne ; donc `$ exit`
+
+#### 2.4. Ajout d'un point d'entrée (v2) :
+1. Créer la version v2 avec CMD : On réutilise le conteneur template cowsay_template (qui existe toujours éteint) pour créer une v2 qui lance cowsay automatiquement.
+
+- `sur podman` : `$ podman container commit cowsay_template --change 'CMD /usr/games/cowsay $MESSAGE' tutoriel-cowsay:v2`
+
+2. Test de la version v2 :
+- **sur podman** : `$ podman container run -ti -e MESSAGE="Bonjour le monde en v2 !" tutoriel-cowsay:v2` -> tout fonctionne
+
+#### 2.5. Republication de l'image v2
+
+1. Publication de l'image v2 sur le registre distant :
+   - **sur podman** : `$ podman push tutoriel-cowsay:v2 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/tutoriel-cowsay:v2` -> On a bien v1 et v2
+
+### 3. Exercice : image Alpine avec Asciidoctor
+#### 3.2. Questions :
+1. est-il nécessaire de pouvoir configurer l’exécution du logiciel conteneurisé (à savoir Asciidoctor) ? si oui, quel mode de configuration est possible et pourrait être mis en place ?
+Oui, il faut indiquer quel fichier convertir. On utilisera une variable d'environnement (ex: `DOC_FILE`)
+
+2. quel point d’entrée définir pour l’image ? comment articuler ce point d’entrée avec le mode de configuration choisi au point précédent ?
+La commande sera asciidoctor /data/$DOC_FILE
+
+3. est-ce qu’un montage sera nécessaire lors de la phase d’usage de l’image ? lequel et pourquoi ? comment rendre cohérent ce point de montage avec le mode de configuration et avec le point d’entrée définis précédemment ?
+Un montage de volume est indispensable pour que le conteneur accède au fichier source .adoc et puisse écrire le fichier .html résultant sur la machine hôte.
+
+#### 3.3. Réalisation
+1. Création du conteneur template et installation
+   - **sur podman** : `$ podman run -ti --name asciidoctor_template docker.io/alpine:3.22`
+   - **sur le container** :
+     - `$ apk update`
+     - `$ apk add asciidoctor`
+     - `$ mkdir /data`
+     - `$ exit`
+
+2. Transformation en image :
+   - **sur podman** : `$ podman container commit asciidoctor_template --change 'CMD asciidoctor /data/$DOC_FILE' exercice-asciidoctor:1.0`
+
+3. Test de l'image :
+  - **sur podman** : 
+    - `$ echo "= Mon Titre" > test.adoc`
+    - `echo "Ceci est un test." >> test.adoc`
+    - `$ cp ~/financiers.adoc ~/tp-images/asciidoctor_test/`
+    - ```bash
+            $ podman container run --rm \
+                -v $(pwd):/data:Z \
+                -e DOC_FILE=test.adoc \
+                localhost/exercice-asciidoctor:1.0
+    - `$ ls -l test.html` -> existe
+
+4. Publication sur gitlab
+  - **sur podman** : `$ podman image push localhost/exercice-asciidoctor:1.0 docker-registry.univ-nantes.fr/e253432u/developpement_exploitation-tp-images/exercice-asciidoctor:1.0`
+
 ---
 
 - Développement et Exploitation - DevOps DataOps
